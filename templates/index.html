@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASD VPS — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#00ff41;font-family:'Courier New',monospace;font-size:13px;min-height:100vh}
+
+/* ── navbar ── */
+.navbar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #0d2b0d;background:#030f03;position:sticky;top:0;z-index:100}
+.brand{color:#00ff41;font-weight:700;font-size:15px;letter-spacing:2px}
+.nav-stats{display:flex;gap:16px;font-size:11px}
+.nav-stat span{color:#4a7c59}
+.nav-stat b{color:#00ff41}
+.nav-right{display:flex;align-items:center;gap:12px}
+.user-badge{background:#0a1f0a;border:1px solid #1a3a1a;padding:4px 10px;font-size:11px;color:#00ff41}
+.logout-btn{background:transparent;border:1px solid #ff4141;color:#ff4141;padding:4px 10px;cursor:pointer;font-family:'Courier New',monospace;font-size:11px}
+.logout-btn:hover{background:#ff4141;color:#000}
+
+/* ── banner ── */
+.banner{background:#0a1a0a;border-bottom:1px solid #0d2b0d;padding:7px 16px;font-size:11px;color:#4a7c59;display:flex;align-items:center;justify-content:space-between}
+.banner span{color:#ffcc00}
+.close-btn{cursor:pointer;color:#4a7c59;background:none;border:none;font-size:14px}
+
+/* ── layout ── */
+.main{display:flex;height:calc(100vh - 56px)}
+.sidebar{width:260px;border-right:1px solid #0d2b0d;background:#030f03;display:flex;flex-direction:column;overflow-y:auto}
+.content{flex:1;overflow-y:auto;padding:0}
+
+/* ── stats bar ── */
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#0d2b0d;border-bottom:1px solid #0d2b0d}
+.stat-box{background:#030f03;padding:16px;text-align:center}
+.stat-num{font-size:28px;font-weight:700;color:#00ff41}
+.stat-num.zero{color:#4a7c59}
+.stat-label{font-size:9px;color:#4a7c59;letter-spacing:2px;margin-top:4px}
+
+/* ── sidebar projects ── */
+.sidebar-header{padding:14px 16px 8px;font-size:10px;color:#4a7c59;letter-spacing:2px;border-bottom:1px solid #0a1a0a}
+.project-item{padding:12px 16px;border-bottom:1px solid #0a1a0a;cursor:pointer;transition:.15s}
+.project-item:hover,.project-item.active{background:#0a1f0a}
+.proj-name{font-size:13px;color:#00ff41;margin-bottom:3px}
+.proj-meta{font-size:10px;color:#4a7c59}
+.proj-status{display:inline-block;padding:2px 8px;font-size:9px;letter-spacing:1px}
+.proj-status.running{color:#00ff41;border:1px solid #00ff41}
+.proj-status.stopped{color:#555;border:1px solid #333}
+.proj-actions{display:flex;gap:6px;margin-top:8px}
+.ic-btn{background:transparent;border:1px solid #1a3a1a;color:#4a7c59;width:28px;height:28px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.ic-btn:hover{border-color:#00ff41;color:#00ff41}
+.ic-btn.danger:hover{border-color:#ff4141;color:#ff4141}
+.ic-btn.start-btn:hover{border-color:#00ff41;color:#00ff41;background:#001a00}
+.ic-btn.stop-btn:hover{border-color:#ffcc00;color:#ffcc00}
+
+/* ── fab ── */
+.fab{position:fixed;bottom:24px;right:24px;width:48px;height:48px;background:#00ff41;color:#000;font-size:24px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:200;font-weight:700}
+.fab:hover{background:#00cc33}
+
+/* ── tabs ── */
+.tabs{display:flex;border-bottom:1px solid #0d2b0d;background:#030f03;padding:0 16px;overflow-x:auto}
+.tab{padding:12px 16px;cursor:pointer;font-size:11px;letter-spacing:2px;color:#4a7c59;white-space:nowrap;border-bottom:2px solid transparent}
+.tab.active{color:#00ff41;border-bottom:2px solid #00ff41}
+.tab:hover{color:#00ff41}
+
+/* ── panels ── */
+.panel{padding:16px;display:none}
+.panel.active{display:block}
+
+/* ── files ── */
+.upload-zone{border:1px dashed #1a3a1a;padding:30px;text-align:center;cursor:pointer;margin-bottom:14px;transition:.2s}
+.upload-zone:hover{border-color:#00ff41;background:#001500}
+.upload-zone-icon{font-size:32px;margin-bottom:8px;opacity:.5}
+.upload-zone p{color:#4a7c59;font-size:11px;margin-bottom:4px}
+.upload-zone small{color:#1e3a1e;font-size:10px}
+.new-file-row{display:flex;gap:8px;margin-bottom:14px}
+.tf{flex:1;background:#0a0a0a;border:1px solid #1a3a1a;color:#00ff41;padding:9px 12px;font-family:'Courier New',monospace;font-size:12px;outline:none}
+.tf:focus{border-color:#00ff41}
+.tf::placeholder{color:#1e3a1e}
+.btn-green{background:transparent;border:1px solid #00ff41;color:#00ff41;padding:9px 14px;cursor:pointer;font-family:'Courier New',monospace;font-size:11px;letter-spacing:1px;white-space:nowrap}
+.btn-green:hover{background:#00ff41;color:#000}
+.file-list{border:1px solid #0d2b0d}
+.file-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #0a1a0a}
+.file-row:last-child{border-bottom:none}
+.file-row:hover{background:#060f06}
+.file-name{color:#00ff41;font-size:12px}
+.file-size{color:#4a7c59;font-size:10px}
+.file-btns{display:flex;gap:6px}
+.empty{color:#4a7c59;padding:24px;text-align:center;font-size:11px}
+
+/* ── packages ── */
+.pkg-install{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.popular-label{color:#4a7c59;font-size:10px;letter-spacing:2px;margin-bottom:8px}
+.pkg-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.chip{background:#0a1a0a;border:1px solid #1a3a1a;color:#4a7c59;padding:5px 10px;font-size:11px;cursor:pointer;font-family:'Courier New',monospace}
+.chip:hover{border-color:#00ff41;color:#00ff41}
+.installed-header{color:#4a7c59;font-size:10px;letter-spacing:2px;margin-bottom:8px}
+.pkg-list{border:1px solid #0d2b0d}
+.pkg-row{padding:8px 14px;border-bottom:1px solid #0a1a0a;display:flex;justify-content:space-between;font-size:12px}
+.pkg-row:last-child{border-bottom:none}
+.pkg-log{background:#050f05;border:1px solid #0d2b0d;padding:12px;height:120px;overflow-y:auto;font-size:11px;color:#4a7c59;margin-top:12px;display:none}
+
+/* ── settings ── */
+.settings-section{border:1px solid #0d2b0d;padding:16px;margin-bottom:14px}
+.settings-title{color:#4a7c59;font-size:10px;letter-spacing:2px;margin-bottom:14px}
+.field-label{color:#4a7c59;font-size:10px;letter-spacing:1px;margin-bottom:5px}
+.field-hint{color:#1e3a1e;font-size:10px;margin-top:3px;margin-bottom:12px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.toggle-label{font-size:12px;color:#00ff41}
+.toggle-sub{font-size:10px;color:#4a7c59}
+.toggle{width:36px;height:20px;background:#0a1a0a;border:1px solid #1a3a1a;cursor:pointer;position:relative;flex-shrink:0}
+.toggle.on{background:#003300;border-color:#00ff41}
+.toggle::after{content:'';position:absolute;width:14px;height:14px;background:#333;top:2px;left:2px;transition:.2s}
+.toggle.on::after{left:18px;background:#00ff41}
+
+/* ── logs ── */
+.log-toolbar{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+.log-title{color:#4a7c59;font-size:10px;letter-spacing:2px;flex:1}
+.btn-red{background:transparent;border:1px solid #ff4141;color:#ff4141;padding:5px 12px;cursor:pointer;font-family:'Courier New',monospace;font-size:10px}
+.btn-red:hover{background:#ff4141;color:#000}
+.live-badge{background:#00ff41;color:#000;padding:4px 10px;font-size:10px;font-weight:700;animation:pulse2 2s infinite}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:.6}}
+.log-box{background:#050f05;border:1px solid #0d2b0d;padding:14px;height:380px;overflow-y:auto;font-size:12px;color:#4a7c59;line-height:1.7}
+.log-line{color:#00ff41}
+.log-box:empty::before{content:'No logs yet. Start the server to see output.';color:#1e3a1e}
+
+/* ── console ── */
+.console-box{background:#050f05;border:1px solid #0d2b0d;padding:14px;height:300px;overflow-y:auto;font-size:12px;color:#4a7c59;line-height:1.7;margin-bottom:10px;font-family:'Courier New',monospace}
+.console-prompt{color:#4a7c59;font-size:11px;margin-bottom:4px}
+.console-out{color:#00ff41;white-space:pre-wrap;word-break:break-all}
+.console-input-row{display:flex;align-items:center;gap:8px}
+.prompt-label{color:#4a7c59;font-size:12px;white-space:nowrap}
+
+/* ── modal ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:300;display:flex;align-items:center;justify-content:center;display:none}
+.overlay.show{display:flex}
+.modal{background:#030f03;border:1px solid #00ff41;padding:28px;width:340px}
+.modal-title{color:#00ff41;font-size:14px;letter-spacing:2px;margin-bottom:20px}
+.modal label{display:block;color:#4a7c59;font-size:10px;letter-spacing:2px;margin-bottom:6px;margin-top:14px}
+.modal label:first-of-type{margin-top:0}
+.modal select{width:100%;background:#0a0a0a;border:1px solid #1a3a1a;color:#00ff41;padding:9px 12px;font-family:'Courier New',monospace;font-size:12px;outline:none}
+.modal-btns{display:flex;gap:10px;margin-top:20px}
+.btn-outline{flex:1;background:transparent;border:1px solid #4a7c59;color:#4a7c59;padding:10px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px}
+.btn-outline:hover{border-color:#00ff41;color:#00ff41}
+
+/* ── editor overlay ── */
+.editor-overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:400;display:none;flex-direction:column}
+.editor-overlay.show{display:flex}
+.editor-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #0d2b0d;background:#030f03}
+.editor-filename{color:#00ff41;font-size:13px;flex:1}
+.editor-textarea{flex:1;background:#050f05;border:none;color:#00ff41;padding:16px;font-family:'Courier New',monospace;font-size:13px;outline:none;resize:none;line-height:1.6}
+.msg{padding:4px 10px;font-size:10px;margin-left:8px;color:#4a7c59}
+.msg.ok{color:#00ff41}
+.msg.err{color:#ff4141}
+
+/* ── no project ── */
+.no-project{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#1e3a1e;gap:8px}
+.no-project .big{font-size:40px;opacity:.3}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#000}
+::-webkit-scrollbar-thumb{background:#1a3a1a}
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<div class="navbar">
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="brand">[ ASD VPS ]</span>
+  </div>
+  <div class="nav-stats">
+    <div class="nav-stat"><span>CPU: </span><b id="nc">—</b><span>%</span></div>
+    <div class="nav-stat"><span>RAM: </span><b id="nr">—</b><span>%</span></div>
+    <div class="nav-stat"><span>DISK: </span><b id="nd">—</b><span>%</span></div>
+  </div>
+  <div class="nav-right">
+    <span class="user-badge">@{{ username }}</span>
+    <button class="logout-btn" onclick="doLogout()">Logout</button>
+  </div>
+</div>
+
+<!-- Banner -->
+<div class="banner" id="banner">
+  <span>⚡ Any problem dm @asd_army_1</span>
+  <button class="close-btn" onclick="document.getElementById('banner').remove()">✕</button>
+</div>
+
+<!-- Main layout -->
+<div class="main">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">PROJECTS</div>
+    <div id="proj-list"></div>
+  </div>
+
+  <!-- Content -->
+  <div class="content" id="content-area">
+    <div class="no-project" id="no-proj">
+      <div class="big">📁</div>
+      <div>No project selected</div>
+      <div style="font-size:10px">Click + to create one</div>
+    </div>
+    <div id="proj-panel" style="display:none">
+      <!-- Stats -->
+      <div class="stats-bar">
+        <div class="stat-box"><div class="stat-num zero" id="s-running">0</div><div class="stat-label">RUNNING</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-total" style="color:#888">0</div><div class="stat-label">TOTAL</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-cpu">—</div><div class="stat-label">CPU %</div></div>
+        <div class="stat-box"><div class="stat-num" id="s-ram">—</div><div class="stat-label">RAM %</div></div>
+      </div>
+
+      <!-- Project header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #0d2b0d;background:#030f03">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="ph-name" style="font-size:14px;font-weight:700"></span>
+          <span id="ph-status" class="proj-status stopped">● STOPPED</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-green" id="start-stop-btn" onclick="toggleStartStop()">▶ Start</button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" onclick="showTab('files',this)">FILES</div>
+        <div class="tab" onclick="showTab('packages',this)">PACKAGES</div>
+        <div class="tab" onclick="showTab('settings',this)">SETTINGS</div>
+        <div class="tab" onclick="showTab('logs',this)">LOGS</div>
+        <div class="tab" onclick="showTab('console',this)">CONSOLE</div>
+      </div>
+
+      <!-- FILES -->
+      <div class="panel active" id="tab-files">
+        <div class="upload-zone" id="dropzone" onclick="document.getElementById('file-input').click()">
+          <div class="upload-zone-icon">📁</div>
+          <p>Click or drag to upload files</p>
+          <small>.zip · .py · .js — requirements.txt auto-installs packages</small>
+        </div>
+        <input type="file" id="file-input" style="display:none" onchange="uploadFile(this.files[0])">
+        <div class="new-file-row">
+          <input class="tf" id="new-filename" placeholder="New file name e.g. helper.py">
+          <button class="btn-green" onclick="createNewFile()">+ New File</button>
+        </div>
+        <div id="file-list-wrap"></div>
+      </div>
+
+      <!-- PACKAGES -->
+      <div class="panel" id="tab-packages">
+        <div class="pkg-install">
+          <input class="tf" id="pkg-name" placeholder="Package name e.g. flask" style="flex:2">
+          <input class="tf" id="pkg-ver" placeholder="Version (opt.)" style="flex:1">
+          <button class="btn-green" onclick="installPkg()">Install</button>
+        </div>
+        <div class="popular-label">POPULAR</div>
+        <div class="pkg-chips" id="pop-chips"></div>
+        <div class="installed-header" id="inst-header">0 INSTALLED</div>
+        <div class="pkg-list" id="pkg-list-wrap"><div class="empty">No packages installed</div></div>
+        <div class="pkg-log" id="pkg-log"></div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="panel" id="tab-settings">
+        <div class="settings-section">
+          <div class="settings-title">PROJECT SETTINGS</div>
+          <div class="field-label">MAIN FILE</div>
+          <input class="tf" id="set-main" placeholder="main.py" style="width:100%;margin-bottom:4px">
+          <div class="field-hint">Entry point: app.py · main.py · bot.py · index.js</div>
+          <div class="field-label">PORT</div>
+          <input class="tf" id="set-port" type="number" style="width:160px">
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">AUTO RESTART</div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Enable Auto Restart</div>
+              <div class="toggle-sub">Server restarts automatically at the specified interval</div>
+            </div>
+            <div class="toggle" id="auto-restart-toggle" onclick="toggleAutoRestart()"></div>
+          </div>
+        </div>
+        <button class="btn-green" style="width:100%;padding:14px;font-size:13px;letter-spacing:2px" onclick="saveSettings()">SAVE SETTINGS</button>
+      </div>
+
+      <!-- LOGS -->
+      <div class="panel" id="tab-logs">
+        <div class="log-toolbar">
+          <span class="log-title" id="log-title">OUTPUT · LIVE</span>
+          <button class="btn-red" onclick="clearLogs()">Clear</button>
+          <span class="live-badge">▐▐ Live</span>
+        </div>
+        <div class="log-box" id="log-box"></div>
+      </div>
+
+      <!-- CONSOLE -->
+      <div class="panel" id="tab-console">
+        <div style="color:#4a7c59;font-size:10px;letter-spacing:2px;margin-bottom:8px" id="console-title">TERMINAL</div>
+        <div class="console-box" id="console-box">
+          <div style="color:#4a7c59">Sulav VPS Terminal ready. Type a command below.</div>
+          <div style="color:#4a7c59" id="console-wd">Working directory: —</div>
+          <div style="color:#4a7c59">Type 'help' for common commands.</div>
+          <div style="margin-top:8px"></div>
+        </div>
+        <div class="console-input-row">
+          <span class="prompt-label" id="console-prompt">$@Sulav $&gt;</span>
+          <input class="tf" id="console-input" placeholder="Enter command..." style="flex:1" onkeydown="if(event.key==='Enter')runCmd()">
+          <button class="btn-green" onclick="runCmd()">▶ Run</button>
+        </div>
+        <div style="margin-top:8px;color:#1e3a1e;font-size:10px;border-left:2px solid #0d2b0d;padding-left:10px">
+          Commands run in project directory. Timeout: 30s.<br>
+          Common: <span style="color:#00ff41">ls · cat file.py · pip install X · python -c "..."</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FAB -->
+<button class="fab" onclick="showNewProjectModal()">+</button>
+
+<!-- New Project Modal -->
+<div class="overlay" id="new-proj-modal">
+  <div class="modal">
+    <div class="modal-title">&gt;_ NEW PROJECT</div>
+    <label>PROJECT NAME</label>
+    <input class="tf" id="np-name" placeholder="my-bot" style="width:100%" onkeydown="if(event.key==='Enter')createProject()">
+    <label>RUNTIME</label>
+    <select class="tf" id="np-runtime" style="width:100%">
+      <option value="python">Python</option>
+      <option value="node">Node.js</option>
+    </select>
+    <div class="modal-btns">
+      <button class="btn-green" onclick="createProject()" style="flex:1;padding:10px">CREATE</button>
+      <button class="btn-outline" onclick="hideModal('new-proj-modal')">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- File Editor -->
+<div class="editor-overlay" id="editor-overlay">
+  <div class="editor-header">
+    <span class="editor-filename" id="editor-fname"></span>
+    <button class="btn-green" onclick="saveFile()">Save</button>
+    <span class="msg" id="editor-msg"></span>
+    <button class="btn-red" onclick="closeEditor()">✕ Close</button>
+  </div>
+  <textarea class="editor-textarea" id="editor-area" spellcheck="false"></textarea>
+</div>
+
+<script>
+const socket = io();
+let currentProj = null;
+let autoRestartOn = false;
+let editingFile = null;
+let cmdHistory = [];
+let histIdx = -1;
+
+const popular = ['flask','fastapi','django','requests','aiohttp','discord.py','python-telegram-bot','tweepy','pandas','numpy','matplotlib','scikit-learn','sqlalchemy','psycopg2','pymongo','redis','celery','pydantic','httpx','openai','anthropic','langchain','boto3','pillow','cryptography','uvicorn','gunicorn'];
+
+// ── socket events ──
+socket.on('log', d => {
+  if (d.project !== currentProj?.id) return;
+  const box = document.getElementById('log-box');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.textContent = d.line;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+});
+
+socket.on('process_stopped', d => {
+  if (d.project !== currentProj?.id) return;
+  currentProj.running = false;
+  updateProjHeader();
+  loadProjects();
+});
+
+socket.on('package_log', d => {
+  if (d.project !== currentProj?.id) return;
+  const log = document.getElementById('pkg-log');
+  log.style.display = 'block';
+  log.innerHTML += d.line + '<br>';
+  log.scrollTop = log.scrollHeight;
+});
+
+socket.on('package_done', d => {
+  if (d.project !== currentProj?.id) return;
+  loadPackages();
+});
+
+// ── stats polling ──
+async function pollStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const d = await r.json();
+    document.getElementById('nc').textContent = d.cpu;
+    document.getElementById('nr').textContent = d.ram;
+    document.getElementById('nd').textContent = d.disk;
+    document.getElementById('s-cpu').textContent = d.cpu;
+    document.getElementById('s-ram').textContent = d.ram;
+    document.getElementById('s-running').textContent = d.running;
+    document.getElementById('s-running').className = 'stat-num' + (d.running > 0 ? '' : ' zero');
+    document.getElementById('s-total').textContent = d.total;
+  } catch(e) {}
+}
+setInterval(pollStats, 3000);
+pollStats();
+
+// ── projects ──
+async function loadProjects() {
+  const r = await fetch('/api/projects');
+  const projects = await r.json();
+  renderSidebar(projects);
+  if (currentProj) {
+    const updated = projects.find(p => p.id === currentProj.id);
+    if (updated) { currentProj = updated; updateProjHeader(); }
+  }
+}
+
+function renderSidebar(projects) {
+  const el = document.getElementById('proj-list');
+  if (!projects.length) {
+    el.innerHTML = '<div class="empty">No projects yet</div>';
+    return;
+  }
+  el.innerHTML = projects.map(p => `
+    <div class="project-item${currentProj?.id===p.id?' active':''}" onclick="selectProject(${JSON.stringify(JSON.stringify(p))})">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span class="proj-name">${p.name}</span>
+        <span class="proj-status ${p.running?'running':'stopped'}">● ${p.running?'RUNNING':'STOPPED'}</span>
+      </div>
+      <div class="proj-meta">${p.runtime} · ${p.main_file}</div>
+      <div class="proj-actions">
+        <button class="ic-btn ${p.running?'stop-btn':'start-btn'}" title="${p.running?'Stop':'Start'}" onclick="event.stopPropagation();quickToggle('${p.id}',${p.running})">${p.running?'⏹':'▶'}</button>
+        <button class="ic-btn" title="Files" onclick="event.stopPropagation();selectProject(${JSON.stringify(JSON.stringify(p))});showTab('files',null)">⊞</button>
+        <button class="ic-btn" title="Settings" onclick="event.stopPropagation();selectProject(${JSON.stringify(JSON.stringify(p))});showTab('settings',null)">⚙</button>
+        <button class="ic-btn danger" title="Delete" onclick="event.stopPropagation();deleteProject('${p.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function selectProject(jsonStr) {
+  currentProj = JSON.parse(jsonStr);
+  document.getElementById('no-proj').style.display = 'none';
+  document.getElementById('proj-panel').style.display = 'block';
+  updateProjHeader();
+  showTab('files', null);
+  loadFiles();
+  loadProjects();
+}
+
+function updateProjHeader() {
+  if (!currentProj) return;
+  document.getElementById('ph-name').textContent = currentProj.name;
+  const st = document.getElementById('ph-status');
+  const btn = document.getElementById('start-stop-btn');
+  if (currentProj.running) {
+    st.textContent = '● RUNNING'; st.className = 'proj-status running';
+    btn.textContent = '⏹ Stop'; btn.style.borderColor='#ffcc00'; btn.style.color='#ffcc00';
+  } else {
+    st.textContent = '● STOPPED'; st.className = 'proj-status stopped';
+    btn.textContent = '▶ Start'; btn.style.borderColor='#00ff41'; btn.style.color='#00ff41';
+  }
+  document.getElementById('console-title').textContent = `TERMINAL — ${currentProj.id}/EXTRACTED`;
+  document.getElementById('console-wd').textContent = `Working directory: ${currentProj.id}/extracted`;
+  document.getElementById('console-prompt').textContent = `${currentProj.id}@Sulav $>`;
+  document.getElementById('log-title').textContent = `OUTPUT · LIVE`;
+}
+
+async function quickToggle(id, running) {
+  const url = `/api/projects/${id}/${running?'stop':'start'}`;
+  await fetch(url, {method:'POST'});
+  loadProjects();
+}
+
+async function toggleStartStop() {
+  if (!currentProj) return;
+  await quickToggle(currentProj.id, currentProj.running);
+  currentProj.running = !currentProj.running;
+  updateProjHeader();
+}
+
+async function deleteProject(id) {
+  if (!confirm(`Delete project "${id}"?`)) return;
+  await fetch(`/api/projects/${id}`, {method:'DELETE'});
+  if (currentProj?.id === id) {
+    currentProj = null;
+    document.getElementById('no-proj').style.display = 'flex';
+    document.getElementById('proj-panel').style.display = 'none';
+  }
+  loadProjects();
+}
+
+function showNewProjectModal() {
+  document.getElementById('np-name').value = '';
+  document.getElementById('new-proj-modal').classList.add('show');
+  setTimeout(() => document.getElementById('np-name').focus(), 100);
+}
+
+async function createProject() {
+  const name = document.getElementById('np-name').value.trim();
+  const runtime = document.getElementById('np-runtime').value;
+  if (!name) return;
+  const r = await fetch('/api/projects', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, runtime})});
+  const d = await r.json();
+  if (d.success) {
+    hideModal('new-proj-modal');
+    loadProjects();
+    selectProject(JSON.stringify(d.project));
+  } else { alert(d.error); }
+}
+
+// ── tabs ──
+function showTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else {
+    document.querySelectorAll('.tab').forEach(t => { if(t.textContent.trim()===name.toUpperCase()) t.classList.add('active'); });
+  }
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name==='files') loadFiles();
+  if (name==='packages') loadPackages();
+  if (name==='settings') loadSettings();
+  if (name==='logs') loadLogs();
+}
+
+// ── files ──
+async function loadFiles() {
+  if (!currentProj) return;
+  const r = await fetch(`/api/projects/${currentProj.id}/files`);
+  const {files} = await r.json();
+  const wrap = document.getElementById('file-list-wrap');
+  if (!files.length) { wrap.innerHTML = '<div class="empty">No files uploaded yet</div>'; return; }
+  wrap.innerHTML = `<div class="file-list">${files.map(f=>`
+    <div class="file-row">
+      <div><span class="file-name">${f.name}</span></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="file-size">${formatSize(f.size)}</span>
+        <div class="file-btns">
+          <button class="ic-btn" title="Edit" onclick="openEditor('${f.name}')">✎</button>
+          <button class="ic-btn danger" title="Delete" onclick="deleteFile('${f.name}')">🗑</button>
+        </div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function formatSize(b) {
+  if (b<1024) return b+'B';
+  if (b<1048576) return (b/1024).toFixed(1)+'KB';
+  return (b/1048576).toFixed(1)+'MB';
+}
+
+async function uploadFile(file) {
+  if (!file || !currentProj) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  await fetch(`/api/projects/${currentProj.id}/files`, {method:'POST', body:fd});
+  loadFiles();
+}
+
+async function createNewFile() {
+  const name = document.getElementById('new-filename').value.trim();
+  if (!name || !currentProj) return;
+  await fetch(`/api/projects/${currentProj.id}/files`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name, content: ''})
+  });
+  document.getElementById('new-filename').value = '';
+  loadFiles();
+  openEditor(name);
+}
+
+async function deleteFile(name) {
+  if (!confirm(`Delete ${name}?`)) return;
+  await fetch(`/api/projects/${currentProj.id}/files/${name}`, {method:'DELETE'});
+  loadFiles();
+}
+
+// Drag and drop
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor='#00ff41'; });
+dz.addEventListener('dragleave', () => { dz.style.borderColor=''; });
+dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor=''; uploadFile(e.dataTransfer.files[0]); });
+
+// ── editor ──
+async function openEditor(filename) {
+  editingFile = filename;
+  document.getElementById('editor-fname').textContent = filename;
+  document.getElementById('editor-msg').textContent = '';
+  document.getElementById('editor-overlay').classList.add('show');
+  const r = await fetch(`/api/projects/${currentProj.id}/files/${filename}`);
+  const {content} = await r.json();
+  document.getElementById('editor-area').value = content;
+}
+
+async function saveFile() {
+  const content = document.getElementById('editor-area').value;
+  const msg = document.getElementById('editor-msg');
+  await fetch(`/api/projects/${currentProj.id}/files/${editingFile}`, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({content})
+  });
+  msg.textContent = '✓ Saved'; msg.className='msg ok';
+  setTimeout(()=>msg.textContent='', 2000);
+}
+
+function closeEditor() {
+  document.getElementById('editor-overlay').classList.remove('show');
+  editingFile = null;
+  loadFiles();
+}
+
+// ── packages ──
+function renderPopularChips() {
+  document.getElementById('pop-chips').innerHTML = popular.map(p =>
+    `<div class="chip" onclick="document.getElementById('pkg-name').value='${p}'">${p}</div>`
+  ).join('');
+}
+renderPopularChips();
+
+async function loadPackages() {
+  if (!currentProj) return;
+  const r = await fetch(`/api/projects/${currentProj.id}/packages`);
+  const {packages} = await r.json();
+  document.getElementById('inst-header').textContent = `${packages.length} INSTALLED`;
+  const wrap = document.getElementById('pkg-list-wrap');
+  if (!packages.length) { wrap.innerHTML = '<div class="empty">No packages installed</div>'; return; }
+  wrap.innerHTML = `<div class="pkg-list">${packages.map(p=>`
+    <div class="pkg-row"><span>${p.name}</span><span style="color:#4a7c59">${p.version}</span></div>`).join('')}</div>`;
+}
+
+async function installPkg() {
+  const pkg = document.getElementById('pkg-name').value.trim();
+  const ver = document.getElementById('pkg-ver').value.trim();
+  if (!pkg) return;
+  document.getElementById('pkg-log').style.display='block';
+  document.getElementById('pkg-log').innerHTML = '';
+  await fetch(`/api/projects/${currentProj.id}/packages`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({package:pkg, version:ver})
+  });
+  document.getElementById('pkg-name').value='';
+  document.getElementById('pkg-ver').value='';
+}
+
+// ── settings ──
+function loadSettings() {
+  if (!currentProj) return;
+  document.getElementById('set-main').value = currentProj.main_file || 'main.py';
+  document.getElementById('set-port').value = currentProj.port || 8080;
+  autoRestartOn = currentProj.auto_restart || false;
+  const tog = document.getElementById('auto-restart-toggle');
+  tog.className = 'toggle' + (autoRestartOn ? ' on' : '');
+}
+
+function toggleAutoRestart() {
+  autoRestartOn = !autoRestartOn;
+  document.getElementById('auto-restart-toggle').className = 'toggle' + (autoRestartOn ? ' on' : '');
+}
+
+async function saveSettings() {
+  if (!currentProj) return;
+  const main_file = document.getElementById('set-main').value.trim();
+  const port = parseInt(document.getElementById('set-port').value);
+  await fetch(`/api/projects/${currentProj.id}/settings`, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({main_file, port, auto_restart: autoRestartOn})
+  });
+  currentProj.main_file = main_file;
+  currentProj.port = port;
+  currentProj.auto_restart = autoRestartOn;
+  alert('Settings saved!');
+}
+
+// ── logs ──
+async function loadLogs() {
+  if (!currentProj) return;
+  const r = await fetch(`/api/projects/${currentProj.id}/logs`);
+  const {logs} = await r.json();
+  const box = document.getElementById('log-box');
+  box.innerHTML = logs.map(l=>`<div class="log-line">${l}</div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+async function clearLogs() {
+  if (!currentProj) return;
+  await fetch(`/api/projects/${currentProj.id}/logs/clear`, {method:'POST'});
+  document.getElementById('log-box').innerHTML = '';
+}
+
+// ── console ──
+async function runCmd() {
+  const input = document.getElementById('console-input');
+  const cmd = input.value.trim();
+  if (!cmd || !currentProj) return;
+  cmdHistory.unshift(cmd);
+  histIdx = -1;
+  input.value = '';
+
+  const box = document.getElementById('console-box');
+  box.innerHTML += `<div style="color:#00ff41;margin-top:6px">${currentProj.id}@Sulav $> ${cmd}</div>`;
+
+  if (cmd === 'clear') { box.innerHTML = ''; return; }
+  if (cmd === 'help') {
+    box.innerHTML += `<div style="color:#4a7c59">ls · cat [file] · pip install [pkg] · python [file] · node [file] · pwd · rm [file]</div>`;
+    box.scrollTop = box.scrollHeight; return;
+  }
+
+  const r = await fetch(`/api/projects/${currentProj.id}/console`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({command: cmd})
+  });
+  const {output, returncode} = await r.json();
+  if (output) {
+    const out = document.createElement('div');
+    out.className = 'console-out';
+    out.style.color = returncode !== 0 ? '#ff6666' : '#4a7c59';
+    out.textContent = output;
+    box.appendChild(out);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+document.getElementById('console-input').addEventListener('keydown', e => {
+  if (e.key==='ArrowUp') { histIdx=Math.min(histIdx+1,cmdHistory.length-1); e.target.value=cmdHistory[histIdx]||''; }
+  if (e.key==='ArrowDown') { histIdx=Math.max(histIdx-1,-1); e.target.value=cmdHistory[histIdx]||''; }
+});
+
+// ── helpers ──
+function hideModal(id) { document.getElementById(id).classList.remove('show'); }
+async function doLogout() { await fetch('/api/logout',{method:'POST'}); window.location.href='/login'; }
+
+// ── init ──
+loadProjects();
+</script>
+</body>
+</html>

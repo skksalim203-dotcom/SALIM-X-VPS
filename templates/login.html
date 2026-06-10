@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASD VPS — Login</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;font-family:'Courier New',monospace;overflow:hidden;height:100vh;display:flex;align-items:center;justify-content:center}
+  #matrix-bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:.18}
+  .card{position:relative;z-index:1;border:1px solid #00ff41;padding:40px 36px;width:340px;background:rgba(0,0,0,.85)}
+  .brand{color:#00ff41;font-size:26px;font-weight:700;letter-spacing:2px;margin-bottom:4px}
+  .sub{color:#4a7c59;font-size:10px;letter-spacing:3px;margin-bottom:28px}
+  .status{display:flex;align-items:center;gap:8px;color:#00ff41;font-size:11px;margin-bottom:22px}
+  .dot{width:8px;height:8px;background:#00ff41;border-radius:50%;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  label{color:#4a7c59;font-size:10px;letter-spacing:2px;display:block;margin-bottom:6px}
+  input{width:100%;background:#0a0a0a;border:1px solid #1a3a1a;color:#00ff41;padding:11px 14px;font-family:'Courier New',monospace;font-size:13px;outline:none;margin-bottom:18px}
+  input:focus{border-color:#00ff41}
+  input::placeholder{color:#1e3a1e}
+  .pw-wrap{position:relative}
+  .pw-wrap input{padding-right:40px;margin-bottom:18px}
+  .eye{position:absolute;right:12px;top:11px;cursor:pointer;color:#4a7c59;font-size:16px;user-select:none}
+  .btn{width:100%;background:transparent;border:1px solid #00ff41;color:#00ff41;padding:13px;font-family:'Courier New',monospace;font-size:13px;letter-spacing:2px;cursor:pointer;transition:.2s}
+  .btn:hover{background:#00ff41;color:#000}
+  .btn:active{transform:scale(.98)}
+  .err{color:#ff4141;font-size:11px;text-align:center;margin-top:12px;min-height:16px}
+  .footer{margin-top:22px;color:#1e3a1e;font-size:9px;text-align:center;letter-spacing:1px;line-height:1.8}
+</style>
+</head>
+<body>
+<canvas id="matrix-bg"></canvas>
+<div class="card">
+  <div class="brand">[ ASD VPS ]</div>
+  <div class="sub">SECURE CLOUD CONTROL PANEL v3.0</div>
+  <div class="status"><span class="dot"></span> AUTHENTICATION REQUIRED</div>
+  <label>USERNAME</label>
+  <input id="user" type="text" placeholder="enter username" autocomplete="off">
+  <label>PASSWORD</label>
+  <div class="pw-wrap">
+    <input id="pass" type="password" placeholder="enter password">
+    <span class="eye" onclick="togglePw()">👁</span>
+  </div>
+  <button class="btn" onclick="doLogin()">&gt;_ AUTHENTICATE</button>
+  <div class="err" id="err"></div>
+  <div class="footer">⚠ UNAUTHORIZED ACCESS PROHIBITED<br>ASD SECURE SYSTEMS · ALL ACTIONS LOGGED</div>
+</div>
+
+<script>
+// Matrix rain
+const c=document.getElementById('matrix-bg');
+const ctx=c.getContext('2d');
+c.width=window.innerWidth;c.height=window.innerHeight;
+const cols=Math.floor(c.width/14);
+const drops=Array(cols).fill(1);
+const chars='アイウエオカキクケコサシスセソタチツテトナニヌネノABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+function drawMatrix(){
+  ctx.fillStyle='rgba(0,0,0,0.05)';ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle='#00ff41';ctx.font='13px Courier New';
+  drops.forEach((y,i)=>{
+    ctx.fillText(chars[Math.floor(Math.random()*chars.length)],i*14,y*14);
+    if(y*14>c.height&&Math.random()>.975)drops[i]=0;
+    drops[i]++;
+  });
+}
+setInterval(drawMatrix,50);
+
+function togglePw(){
+  const p=document.getElementById('pass');
+  p.type=p.type==='password'?'text':'password';
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+
+async function doLogin(){
+  const u=document.getElementById('user').value.trim();
+  const p=document.getElementById('pass').value;
+  const err=document.getElementById('err');
+  if(!u||!p){err.textContent='Fill all fields';return;}
+  const btn=document.querySelector('.btn');
+  btn.textContent='>_ AUTHENTICATING...';btn.disabled=true;
+  try{
+    const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json();
+    if(d.success){window.location.href='/';}
+    else{err.textContent=d.error||'Access denied';btn.textContent='>_ AUTHENTICATE';btn.disabled=false;}
+  }catch(e){err.textContent='Connection error';btn.textContent='>_ AUTHENTICATE';btn.disabled=false;}
+}
+</script>
+</body>
+</html>
